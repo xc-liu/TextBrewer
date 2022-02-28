@@ -116,6 +116,9 @@ class GeneralDistiller(BasicDistiller):
             total_loss += total_kd_loss * self.d_config.kd_loss_weight
             losses_dict['unweighted_kd_loss'] = total_kd_loss
 
+        print('teacher results', results_T)
+        print('student results', results_S)
+
         inters_T = {feature: results_T.get(feature,[]) for feature in FEATURES}
         inters_S = {feature: results_S.get(feature,[]) for feature in FEATURES}
         inputs_mask_T = results_T.get('inputs_mask',None)
@@ -127,8 +130,6 @@ class GeneralDistiller(BasicDistiller):
             loss_type = inter_match.loss
             match_weight = inter_match.weight
             match_loss = MATCH_LOSS_MAP[loss_type]
-            print(inters_S[feature])
-            print(inters_T[feature])
 
             if type(layer_S) is list and type(layer_T) is list:
                 inter_S = [inters_S[feature][s] for s in layer_S]
