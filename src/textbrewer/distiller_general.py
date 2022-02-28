@@ -116,8 +116,8 @@ class GeneralDistiller(BasicDistiller):
             total_loss += total_kd_loss * self.d_config.kd_loss_weight
             losses_dict['unweighted_kd_loss'] = total_kd_loss
 
-        print('teacher results', results_T)
-        print('student results', results_S)
+        print('teacher results', results_T.keys())
+        print('student results', results_S.keys())
 
         inters_T = {feature: results_T.get(feature,[]) for feature in FEATURES}
         inters_S = {feature: results_S.get(feature,[]) for feature in FEATURES}
