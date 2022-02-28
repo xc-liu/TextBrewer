@@ -116,9 +116,6 @@ class GeneralDistiller(BasicDistiller):
             total_loss += total_kd_loss * self.d_config.kd_loss_weight
             losses_dict['unweighted_kd_loss'] = total_kd_loss
 
-        print('teacher results', results_T.keys())
-        print('student results', results_S.keys())
-
         inters_T = {feature: results_T.get(feature,[]) for feature in FEATURES}
         inters_S = {feature: results_S.get(feature,[]) for feature in FEATURES}
         inputs_mask_T = results_T.get('inputs_mask',None)
@@ -147,6 +144,9 @@ class GeneralDistiller(BasicDistiller):
                 if self.projs[ith]:
                     #inter_T = self.projs[ith](inter_T)
                     inter_S = self.projs[ith](inter_S)
+            
+            print('inter_S', inter_S, inter_S.shape)
+            print('inter_T', inter_T, inter_T.shape)
             intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
             total_loss += intermediate_loss * match_weight
             losses_dict[f'unweighted_{feature}_{loss_type}_{name_S}_{name_T}'] = intermediate_loss
