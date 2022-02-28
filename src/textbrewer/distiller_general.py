@@ -127,6 +127,8 @@ class GeneralDistiller(BasicDistiller):
             loss_type = inter_match.loss
             match_weight = inter_match.weight
             match_loss = MATCH_LOSS_MAP[loss_type]
+            print(inters_S[feature])
+            print(inters_T[feature])
 
             if type(layer_S) is list and type(layer_T) is list:
                 inter_S = [inters_S[feature][s] for s in layer_S]
