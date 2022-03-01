@@ -132,8 +132,16 @@ class GeneralDistiller(BasicDistiller):
             print('inters_S', inters_S)
             print('inters_T', inters_T)
             print('feature', feature)
-            print('inters_S[feature]', type(inters_S[feature]), (inters_S[feature]).shape, inters_S[feature])
-            print('inters_T[feature]', type(inters_T[feature]), (inters_T[feature]).shape, inters_T[feature])
+            print('inters_S[feature]', type(inters_S[feature]), inters_S[feature])
+            try:
+                print((inters_S[feature]).shape)
+            except:
+                print(len(inters_S[feature]))
+            print('inters_T[feature]', type(inters_T[feature]), inters_T[feature])
+            try:
+                print((inters_T[feature]).shape)
+            except:
+                print(len(inters_T[feature]))
             if type(layer_S) is list and type(layer_T) is list:
                 inter_S = [inters_S[feature][s] for s in layer_S]
                 inter_T = [inters_T[feature][t] for t in layer_T]
