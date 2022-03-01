@@ -127,21 +127,7 @@ class GeneralDistiller(BasicDistiller):
             loss_type = inter_match.loss
             match_weight = inter_match.weight
             match_loss = MATCH_LOSS_MAP[loss_type]
-            print('layer_S', layer_S)
-            print('layer_T', layer_T)
-            print('inters_S', inters_S)
-            print('inters_T', inters_T)
-            print('feature', feature)
-            print('inters_S[feature]', type(inters_S[feature]), inters_S[feature])
-            try:
-                print((inters_S[feature]).shape)
-            except:
-                print(len(inters_S[feature]))
-            print('inters_T[feature]', type(inters_T[feature]), inters_T[feature])
-            try:
-                print((inters_T[feature]).shape)
-            except:
-                print(len(inters_T[feature]))
+
             if type(layer_S) is list and type(layer_T) is list:
                 inter_S = [inters_S[feature][s] for s in layer_S]
                 inter_T = [inters_T[feature][t] for t in layer_T]
