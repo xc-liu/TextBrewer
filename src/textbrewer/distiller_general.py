@@ -145,8 +145,6 @@ class GeneralDistiller(BasicDistiller):
                     #inter_T = self.projs[ith](inter_T)
                     inter_S = self.projs[ith](inter_S)
             
-            print('inter_S', inter_S, inter_S.shape)
-            print('inter_T', inter_T, inter_T.shape)
             intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
             total_loss += intermediate_loss * match_weight
             losses_dict[f'unweighted_{feature}_{loss_type}_{name_S}_{name_T}'] = intermediate_loss
