@@ -53,7 +53,7 @@ Different from other options, when using ``'flsw'`` and ``'cwsm'``, you need to 
 
 
 
-FEATURES = ['last_hidden_state','attention']
+FEATURES = ['hidden_states','attention']
 
 
 ADAPTOR_KEYS = ['logits','logits_mask','losses','inputs_mask','labels'] + FEATURES
