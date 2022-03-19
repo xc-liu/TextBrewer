@@ -1,3 +1,5 @@
+import wandb
+
 from .distiller_utils import *
 
 class BasicDistiller(AbstractDistiller):
@@ -120,7 +122,7 @@ class BasicDistiller(AbstractDistiller):
         tqdm_disable = None if self.rank == 0 else True
         return optimizer, scheduler, tqdm_disable
 
-    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, **args):
+    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, **args):
         if self.d_config.is_caching_logits is True:
             raise AssertionError("You cannot set is_caching_logits to True with num_steps not None!")
         total_global_steps = num_steps
@@ -144,6 +146,9 @@ class BasicDistiller(AbstractDistiller):
             writer_step += 1
     
             total_loss /= self.t_config.gradient_accumulation_steps
+            if run:
+                run.log({'loss': total_loss})
+
             if self.t_config.fp16:
                 with amp.scale_loss(total_loss,optimizer) as scaled_loss:
                     scaled_loss.backward()
@@ -178,7 +183,7 @@ class BasicDistiller(AbstractDistiller):
                 logger.info("Training finished")
                 return
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args):
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, **args):
 
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
@@ -215,6 +220,9 @@ class BasicDistiller(AbstractDistiller):
                 writer_step += 1
 
                 total_loss /= self.t_config.gradient_accumulation_steps
+                if run:
+                    run.log({'loss': total_loss})
+
                 if self.t_config.fp16:
                     with amp.scale_loss(total_loss,optimizer) as scaled_loss:
                         scaled_loss.backward()
@@ -247,7 +255,7 @@ class BasicDistiller(AbstractDistiller):
 
             logger.info(f"Epoch {current_epoch+1} finished")
 
-    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, **args):
+    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, **args):
         """
         trains the student model.
 
@@ -275,12 +283,12 @@ class BasicDistiller(AbstractDistiller):
                 distiller.train(optimizer, scheduler_class = get_linear_schedule_with_warmup, scheduler_args= {'num_warmup_steps': 100, 'num_training_steps': 1000})
         """
         optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args, scheduler)
-        
+
         assert not (num_epochs is None and num_steps is None)
         if num_steps is not None:
-            self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, **args)
+            self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, **args)
         else:
-            self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args)
+            self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, **args)
 
 
 
