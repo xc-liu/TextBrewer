@@ -161,11 +161,11 @@ class BasicDistiller(AbstractDistiller):
             if step % dev_check == 0:
                 dev_loss = 0
                 dev_step = 0
-                for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
+                for _, batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                     if batch_postprocessor is not None:
-                        dev_batch = batch_postprocessor(dev_batch)
-                    dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
-                    del dev_batch
+                        batch = batch_postprocessor(batch)
+                    dev_loss_temp, _ = self.train_on_batch(batch, args)
+                    del batch
                     dev_loss += dev_loss_temp
                     dev_step += 1
                 dev_loss = dev_loss / dev_step
@@ -257,11 +257,11 @@ class BasicDistiller(AbstractDistiller):
                 if step % dev_check == 0:
                     dev_loss = 0
                     dev_step = 0
-                    for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
+                    for _, batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                         if batch_postprocessor is not None:
-                            dev_batch = batch_postprocessor(dev_batch)
-                        dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
-                        del dev_batch
+                            batch = batch_postprocessor(batch)
+                        dev_loss_temp, _ = self.train_on_batch(batch, args)
+                        del batch
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
