@@ -145,6 +145,7 @@ class BasicDistiller(AbstractDistiller):
                 batch = batch_postprocessor(batch)
             total_loss, losses_dict = self.train_on_batch(batch,args)
             del batch
+            torch.cuda.empty_cache()
             self.write_loss(total_loss, writer_step, losses_dict)
             writer_step += 1
     
@@ -166,6 +167,7 @@ class BasicDistiller(AbstractDistiller):
                         batch = batch_postprocessor(batch)
                     dev_loss_temp, _ = self.train_on_batch(batch, args)
                     del batch
+                    torch.cuda.empty_cache()
                     dev_loss += dev_loss_temp
                     dev_step += 1
                 dev_loss = dev_loss / dev_step
@@ -241,6 +243,7 @@ class BasicDistiller(AbstractDistiller):
                         batch = batch_postprocessor(batch)
                 total_loss, losses_dict = self.train_on_batch(batch,args)
                 del batch
+                torch.cuda.empty_cache()
                 self.write_loss(total_loss, writer_step, losses_dict)
                 writer_step += 1
 
@@ -262,6 +265,7 @@ class BasicDistiller(AbstractDistiller):
                             batch = batch_postprocessor(batch)
                         dev_loss_temp, _ = self.train_on_batch(batch, args)
                         del batch
+                        torch.cuda.empty_cache()
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
