@@ -159,22 +159,25 @@ class BasicDistiller(AbstractDistiller):
                 total_loss.backward()
 
             if step % dev_check == 0:
-                for dev_step, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
-                    if dev_step >= 1:
-                        break
+                dev_loss = 0
+                dev_step = 0
+                for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                     if batch_postprocessor is not None:
                         dev_batch = batch_postprocessor(dev_batch)
-                    dev_loss, _ = self.train_on_batch(dev_batch, args)
-                    if run:
-                        run.log({'dev_loss': dev_loss})
-                    if dev_loss > prev_dev_loss:
-                        patience_count += 1
-                        if patience_count == patience:
-                            logger.info("Early stopping triggered. Training finished")
-                            return
-                    else:
-                        patience_count = 0
-                    prev_dev_loss = dev_loss
+                    dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
+                    dev_loss += dev_loss_temp
+                    dev_step += 1
+                dev_loss = dev_loss / dev_step
+                if run:
+                    run.log({'dev_loss': dev_loss})
+                if dev_loss > prev_dev_loss:
+                    patience_count += 1
+                    if patience_count == patience:
+                        logger.info("Early stopping triggered. Training finished")
+                        return
+                else:
+                    patience_count = 0
+                prev_dev_loss = dev_loss
 
             if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                 if max_grad_norm > 0:
@@ -251,22 +254,25 @@ class BasicDistiller(AbstractDistiller):
                     total_loss.backward()
 
                 if step % dev_check == 0:
-                    for dev_step, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
-                        if dev_step >= 1:
-                            break
+                    dev_loss = 0
+                    dev_step = 0
+                    for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                         if batch_postprocessor is not None:
                             dev_batch = batch_postprocessor(dev_batch)
-                        dev_loss, _ = self.train_on_batch(dev_batch, args)
-                        if run:
-                            run.log({'dev_loss': dev_loss})
-                        if dev_loss > prev_dev_loss:
-                            patience_count += 1
-                            if patience_count == patience:
-                                logger.info("Early stopping triggered. Training finished")
-                                return
-                        else:
-                            patience_count = 0
-                        prev_dev_loss = dev_loss
+                        dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
+                        dev_loss += dev_loss_temp
+                        dev_step += 1
+                    dev_loss = dev_loss / dev_step
+                    if run:
+                        run.log({'dev_loss': dev_loss})
+                    if dev_loss > prev_dev_loss:
+                        patience_count += 1
+                        if patience_count == patience:
+                            logger.info("Early stopping triggered. Training finished")
+                            return
+                    else:
+                        patience_count = 0
+                    prev_dev_loss = dev_loss
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
