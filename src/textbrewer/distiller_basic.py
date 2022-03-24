@@ -165,6 +165,8 @@ class BasicDistiller(AbstractDistiller):
                     if batch_postprocessor is not None:
                         dev_batch = batch_postprocessor(dev_batch)
                     dev_loss, _ = self.train_on_batch(dev_batch, args)
+                    if run:
+                        run.log({'dev_loss': dev_loss})
                     if dev_loss > prev_dev_loss:
                         patience_count += 1
                         if patience_count == patience:
@@ -255,6 +257,8 @@ class BasicDistiller(AbstractDistiller):
                         if batch_postprocessor is not None:
                             dev_batch = batch_postprocessor(dev_batch)
                         dev_loss, _ = self.train_on_batch(dev_batch, args)
+                        if run:
+                            run.log({'dev_loss': dev_loss})
                         if dev_loss > prev_dev_loss:
                             patience_count += 1
                             if patience_count == patience:
