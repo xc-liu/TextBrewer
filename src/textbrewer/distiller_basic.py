@@ -144,7 +144,7 @@ class BasicDistiller(AbstractDistiller):
             if batch_postprocessor is not None:
                 batch = batch_postprocessor(batch)
             total_loss, losses_dict = self.train_on_batch(batch,args)
-
+            del batch
             self.write_loss(total_loss, writer_step, losses_dict)
             writer_step += 1
     
@@ -165,6 +165,7 @@ class BasicDistiller(AbstractDistiller):
                     if batch_postprocessor is not None:
                         dev_batch = batch_postprocessor(dev_batch)
                     dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
+                    del dev_batch
                     dev_loss += dev_loss_temp
                     dev_step += 1
                 dev_loss = dev_loss / dev_step
@@ -239,7 +240,7 @@ class BasicDistiller(AbstractDistiller):
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
                 total_loss, losses_dict = self.train_on_batch(batch,args)
-
+                del batch
                 self.write_loss(total_loss, writer_step, losses_dict)
                 writer_step += 1
 
@@ -260,6 +261,7 @@ class BasicDistiller(AbstractDistiller):
                         if batch_postprocessor is not None:
                             dev_batch = batch_postprocessor(dev_batch)
                         dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
+                        del dev_batch
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
