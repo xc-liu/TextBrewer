@@ -1,3 +1,5 @@
+import copy
+
 import wandb
 
 from .distiller_utils import *
@@ -24,6 +26,8 @@ class BasicDistiller(AbstractDistiller):
                  adaptor_T,
                  adaptor_S):
         super(BasicDistiller, self).__init__(train_config, distill_config, model_T, model_S, adaptor_T, adaptor_S)
+        self.best_model_T = None
+        self.best_model_S = None
 
     def save_and_callback(self,global_step, step, epoch, callback):
         if self.rank != 0:
@@ -157,14 +161,14 @@ class BasicDistiller(AbstractDistiller):
             else:
                 total_loss.backward()
 
-            if step % dev_check == 0:
+            if dev_data is not None and step % dev_check == 0:
                 dev_loss = 0
                 dev_step = 0
-                for _, batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
+                for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                     if batch_postprocessor is not None:
-                        batch = batch_postprocessor(batch)
+                        dev_batch = batch_postprocessor(dev_batch)
                     with torch.no_grad():
-                        dev_loss_temp, _ = self.train_on_batch(batch, args)
+                        dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
                     dev_loss += dev_loss_temp
                     dev_step += 1
                 dev_loss = dev_loss / dev_step
@@ -174,9 +178,13 @@ class BasicDistiller(AbstractDistiller):
                     patience_count += 1
                     if patience_count == patience:
                         logger.info("Early stopping triggered. Training finished")
+                        self.model_T.load_state_dict(self.best_model_T)
+                        self.model_S.load_state_dict(self.best_model_S)
                         return
                 else:
                     patience_count = 0
+                    self.best_model_T = copy.deepcopy(self.model_T.state_dict())
+                    self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                 prev_dev_loss = dev_loss
 
             if (step+1)%self.t_config.gradient_accumulation_steps == 0:
@@ -206,7 +214,6 @@ class BasicDistiller(AbstractDistiller):
                 return
 
     def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, dev_data, patience, dev_check, **args):
-
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
@@ -252,7 +259,7 @@ class BasicDistiller(AbstractDistiller):
                 else:
                     total_loss.backward()
 
-                if step % dev_check == 0:
+                if dev_data is not None and step % dev_check == 0:
                     dev_loss = 0
                     dev_step = 0
                     for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
@@ -269,9 +276,13 @@ class BasicDistiller(AbstractDistiller):
                         patience_count += 1
                         if patience_count == patience:
                             logger.info("Early stopping triggered. Training finished")
+                            self.model_T.load_state_dict(self.best_model_T)
+                            self.model_S.load_state_dict(self.best_model_S)
                             return
                     else:
                         patience_count = 0
+                        self.best_model_T = copy.deepcopy(self.model_T.state_dict())
+                        self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                     prev_dev_loss = dev_loss
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
