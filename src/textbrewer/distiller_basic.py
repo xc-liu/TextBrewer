@@ -271,15 +271,16 @@ class BasicDistiller(AbstractDistiller):
                     dev_loss = 0
                     dev_step = 0
                     print("Starting evaluation ", torch.cuda.memory_summary(0))
-                    for _, batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
+                    for _, dev_batch in tqdm(enumerate(dev_data), disable=tqdm_disable):
                         if batch_postprocessor is not None:
-                            batch = batch_postprocessor(batch)
+                            dev_batch = batch_postprocessor(dev_batch)
                         print("After creating eval batch ", torch.cuda.memory_summary(0))
-                        dev_loss_temp, _ = self.train_on_batch(batch, args)
+                        with torch.no_grad():
+                            dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
                         del batch
-                        print("After deleting eval batch ", torch.cuda.memory_summary(0))
-                        torch.cuda.caching_allocator_delete(0)
-                        print("After delete cache ", torch.cuda.memory_summary(0))
+                        print("After calculating loss of eval batch ", torch.cuda.memory_summary(0))
+                        # torch.cuda.caching_allocator_delete(0)
+                        # print("After delete cache ", torch.cuda.memory_summary(0))
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
