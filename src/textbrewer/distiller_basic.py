@@ -277,7 +277,6 @@ class BasicDistiller(AbstractDistiller):
                         print("After creating eval batch ", torch.cuda.memory_summary(0))
                         with torch.no_grad():
                             dev_loss_temp, _ = self.train_on_batch(dev_batch, args)
-                        del batch
                         print("After calculating loss of eval batch ", torch.cuda.memory_summary(0))
                         # torch.cuda.caching_allocator_delete(0)
                         # print("After delete cache ", torch.cuda.memory_summary(0))
