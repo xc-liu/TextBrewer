@@ -33,16 +33,21 @@ class BasicDistiller(AbstractDistiller):
         if self.rank != 0:
             torch.distributed.barrier()    # save and eval with single process
         else:
-            logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
-            coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
-            state_dict = coreModel.state_dict()
-            torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
+            # logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
+            # coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
+            # state_dict = coreModel.state_dict()
+            # torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
             if self.local_rank == 0:
                 torch.distributed.barrier()
         if callback is not None:
             logger.info("Running callback function...")
             callback(model=self.model_S, step=global_step)
             self.model_S.train()
+
+    def save_state_dict_S(self):
+        coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
+        state_dict = coreModel.state_dict()
+        torch.save(state_dict, os.path.join(self.t_config.output_dir, self.model_name + "student_temp.pkl"))
 
 
     def write_loss(self, total_loss, writer_step, losses_dict=None):
@@ -126,7 +131,7 @@ class BasicDistiller(AbstractDistiller):
         tqdm_disable = None if self.rank == 0 else True
         return optimizer, scheduler, tqdm_disable
 
-    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, dev_data, patience, dev_check, **args):
+    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, dev_data, patience, dev_check, dev_loss_threshold, **args):
         if self.d_config.is_caching_logits is True:
             raise AssertionError("You cannot set is_caching_logits to True with num_steps not None!")
         total_global_steps = num_steps
@@ -174,7 +179,7 @@ class BasicDistiller(AbstractDistiller):
                 dev_loss = dev_loss / dev_step
                 if run:
                     run.log({'dev_loss': dev_loss})
-                if dev_loss > prev_dev_loss:
+                if dev_loss - prev_dev_loss > dev_loss_threshold:
                     patience_count += 1
                     if patience_count == patience:
                         logger.info("Early stopping triggered. Training finished")
@@ -185,6 +190,7 @@ class BasicDistiller(AbstractDistiller):
                     patience_count = 0
                     self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                     self.best_model_S = copy.deepcopy(self.model_S.state_dict())
+                    self.save_state_dict_S()
                 prev_dev_loss = dev_loss
 
             if (step+1)%self.t_config.gradient_accumulation_steps == 0:
@@ -213,7 +219,7 @@ class BasicDistiller(AbstractDistiller):
                 logger.info("Training finished")
                 return
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, dev_data, patience, dev_check, **args):
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, dev_data, patience, dev_check, dev_loss_threshold, **args):
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
@@ -272,7 +278,7 @@ class BasicDistiller(AbstractDistiller):
                     dev_loss = dev_loss / dev_step
                     if run:
                         run.log({'dev_loss': dev_loss})
-                    if dev_loss > prev_dev_loss:
+                    if dev_loss - prev_dev_loss > dev_loss_threshold:
                         patience_count += 1
                         if patience_count == patience:
                             logger.info("Early stopping triggered. Training finished")
@@ -283,6 +289,7 @@ class BasicDistiller(AbstractDistiller):
                         patience_count = 0
                         self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                         self.best_model_S = copy.deepcopy(self.model_S.state_dict())
+                        self.save_state_dict_S()
                     prev_dev_loss = dev_loss
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
@@ -311,7 +318,7 @@ class BasicDistiller(AbstractDistiller):
 
             logger.info(f"Epoch {current_epoch+1} finished")
 
-    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, dev_data=None, patience=None, dev_check=None, **args):
+    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, dev_data=None, patience=None, dev_check=None, dev_loss_threshold=None, model_name=None, **args):
         """
         trains the student model.
 
@@ -342,12 +349,17 @@ class BasicDistiller(AbstractDistiller):
         """
         optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args, scheduler)
 
-        assert not (num_epochs is None and num_steps is None)
-        assert not (dev_data is not None and (patience is None or dev_check is None))
-        if num_steps is not None:
-            self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, dev_data, patience, dev_check, **args)
+        if model_name is not None:
+            self.model_name = model_name + '_'
         else:
-            self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, dev_data, patience, dev_check, **args)
+            self.model_name = ''
+
+        assert not (num_epochs is None and num_steps is None)
+        assert not (dev_data is not None and (patience is None or dev_check is None or dev_loss_threshold is None))
+        if num_steps is not None:
+            self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, dev_data, patience, dev_check, dev_loss_threshold, **args)
+        else:
+            self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, dev_data, patience, dev_check, dev_loss_threshold, **args)
 
     def train_on_batch(self, batch, args):
         if self.d_config.is_caching_logits is False:
