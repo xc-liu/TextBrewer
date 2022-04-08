@@ -1,3 +1,5 @@
+import math
+
 import torch.nn.functional as F
 import torch
 from typing import List
@@ -34,6 +36,49 @@ def kd_ce_loss(logits_S, logits_T, temperature=1):
     beta_logits_S = logits_S / temperature
     p_T = F.softmax(beta_logits_T, dim=-1)
     loss = -(p_T * F.log_softmax(beta_logits_S, dim=-1)).sum(dim=-1).mean()
+    return loss
+
+def att_kl_divergence(attention_S, attention_T, mask=None):
+    '''
+    * Calculates the kl divergence between `attention_S` and `attention_T`.
+    * If the `inputs_mask` is given, masks the positions where ``input_mask==0``.
+
+    :param torch.Tensor logits_S: tensor of shape  (*batch_size*, *num_heads*, *length*, *length*)
+    :param torch.Tensor logits_T: tensor of shape  (*batch_size*, *num_heads*, *length*, *length*)
+    :param torch.Tensor mask: tensor of shape  (*batch_size*, *length*)
+    '''
+    if mask is None:
+        attention_S_select = torch.where(attention_S <= -1e-3, torch.zeros_like(attention_S), attention_S)
+        attention_T_select = torch.where(attention_T <= -1e-3, torch.zeros_like(attention_T), attention_T)
+        loss = F.kl_div(torch.log(attention_S_select), attention_T_select, reduction='batchmean') / (attention_S_select.size(1) * attention_S_select.size(2))
+    else:
+        mask = mask.to(attention_S).unsqueeze(1).expand(-1, attention_S.size(1), -1) # (bs, num_of_heads, len)
+        valid_count = torch.pow(mask.sum(dim=2),2).sum()
+        loss = (F.kl_div(torch.log(attention_S), attention_T, reduction='batchmean') * mask.unsqueeze(-1) * mask.unsqueeze(2)).sum() / valid_count / (attention_S.size(1) * attention_S.size(2))
+    return loss
+
+
+def value_kl_divergence(value_S, value_T, mask=None):
+    '''
+    * Calculates the kl divergence between the value relation of`value_S` and `value_T`.
+    * If the `inputs_mask` is given, masks the positions where ``input_mask==0``.
+
+    :param torch.Tensor logits_S: tensor of shape  (*batch_size*, *num_heads*, *length*, *length*)
+    :param torch.Tensor logits_T: tensor of shape  (*batch_size*, *num_heads*, *length*, *length*)
+    :param torch.Tensor mask: tensor of shape  (*batch_size*, *length*)
+    '''
+    VR_S = torch.matmul(value_S, value_S.transpose(-1, -2)) / math.sqrt(value_S.size(3))
+    VR_S = F.softmax(VR_S, dim=-1)
+    VR_T = torch.matmul(value_T, value_T.transpose(-1, -2)) / math.sqrt(value_T.size(3))
+    VR_T = F.softmax(VR_T, dim=-1)
+    if mask is None:
+        VR_S_select = torch.where(VR_S <= -1e-3, torch.zeros_like(VR_S), VR_S)
+        VR_T_select = torch.where(VR_T <= -1e-3, torch.zeros_like(VR_T), VR_T)
+        loss = F.kl_div(torch.log(VR_S_select), VR_T_select, reduction='batchmean') / (VR_S_select.size(1) * VR_S_select.size(2))
+    else:
+        mask = mask.to(VR_S).unsqueeze(1).expand(-1, VR_S.size(1), -1) # (bs, num_of_heads, len)
+        valid_count = torch.pow(mask.sum(dim=2),2).sum()
+        loss = (F.kl_div(torch.log(VR_S), VR_T, reduction='batchmean') * mask.unsqueeze(-1) * mask.unsqueeze(2)).sum() / valid_count / (VR_S.size(1) * VR_S.size(2))
     return loss
 
 

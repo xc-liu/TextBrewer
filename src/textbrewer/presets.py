@@ -53,7 +53,7 @@ Different from other options, when using ``'flsw'`` and ``'cwsm'``, you need to 
 
 
 
-FEATURES = ['hidden_states','attention']
+FEATURES = ['hidden_states','attention', 'value']
 
 
 ADAPTOR_KEYS = ['logits','logits_mask','losses','inputs_mask','labels'] + FEATURES
@@ -71,7 +71,8 @@ ADAPTOR_KEYS = ['logits','logits_mask','losses','inputs_mask','labels'] + FEATUR
 
 
 KD_LOSS_MAP = {'mse': kd_mse_loss,
-                'ce': kd_ce_loss}
+                'ce': kd_ce_loss
+                }
 """
 (*dict*) available KD losses
 
@@ -89,7 +90,9 @@ MATCH_LOSS_MAP = {'attention_mse_sum': att_mse_sum_loss,
                   'gram' : fsp_loss,
                   'fsp'  : fsp_loss,
                   'mmd'  : mmd_loss,
-                  'nst'  : mmd_loss}
+                  'nst'  : mmd_loss,
+                  'attention_kl': att_kl_divergence,
+                  'value_kl': value_kl_divergence}
 """
 (*dict*) intermediate feature matching loss functions, includes:
 
