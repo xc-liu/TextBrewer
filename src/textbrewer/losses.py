@@ -48,9 +48,7 @@ def att_kl_divergence(attention_S, attention_T, mask=None):
     :param torch.Tensor mask: tensor of shape  (*batch_size*, *length*)
     '''
     if mask is None:
-        attention_S_select = torch.where(attention_S <= -1e-3, torch.zeros_like(attention_S), attention_S)
-        attention_T_select = torch.where(attention_T <= -1e-3, torch.zeros_like(attention_T), attention_T)
-        loss = F.kl_div(torch.log(attention_S_select), attention_T_select, reduction='batchmean') / (attention_S_select.size(1) * attention_S_select.size(2))
+        loss = F.kl_div(torch.log(attention_S[attention_S != 0]), attention_T[attention_T != 0], reduction='batchmean') / (attention_S.size(1) * attention_S.size(2))
     else:
         mask = mask.to(attention_S).unsqueeze(1).expand(-1, attention_S.size(1), -1) # (bs, num_of_heads, len)
         valid_count = torch.pow(mask.sum(dim=2),2).sum()
