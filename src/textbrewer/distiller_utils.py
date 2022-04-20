@@ -314,7 +314,7 @@ def transpose_for_scores(x, num_attention_heads, attention_head_size):
 
 def add_attention_value(model, results):
     num_attention_heads = results['attention'][0].size(1)
-    attention_head_size = results['attention'][0].size(2)
+    attention_head_size = -1
 
     values = (None, )
     for layer in range(1, len(results['attention'])):
