@@ -1,3 +1,5 @@
+import torch.nn
+
 from .distiller_utils import *
 from .distiller_basic import BasicDistiller
 
@@ -69,14 +71,14 @@ class GeneralDistiller(BasicDistiller):
             self.model_S._forward_hooks = handles_S  # restore hooks
             self.model_T._forward_hooks = handles_T
 
-    def train_on_batch(self, batch, args):
+    def train_on_batch(self, batch, pairing_batch, args):
 
         (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device,
                                                                                         self.model_T, self.model_S,
                                                                                         args)
 
-        results_T = post_adaptor(self.adaptor_T(teacher_batch, results_T))
-        results_S = post_adaptor(self.adaptor_S(student_batch, results_S))
+        results_T = post_adaptor(self.adaptor_T(teacher_batch, pairing_batch['teacher'], results_T))
+        results_S = post_adaptor(self.adaptor_S(student_batch, pairing_batch['student'], results_S))
 
         results_T = add_attention_value(self.model_T, results_T)
         results_S = add_attention_value(self.model_S, results_S)
@@ -119,6 +121,87 @@ class GeneralDistiller(BasicDistiller):
                     total_kd_loss += self.kd_loss(l_S, l_T, temperature)
             total_loss += total_kd_loss * self.d_config.kd_loss_weight
             losses_dict['unweighted_kd_loss'] = total_kd_loss
+
+        if 'embedding_similarity' in results_S:
+            em_sim_loss = torch.nn.functional.mse_loss(results_S['embedding_similarity'],
+                                                       results_T['embedding_similarity'])
+            total_loss += em_sim_loss * self.d_config.em_sim_loss_weight
+            losses_dict['unweighted_embedding_similarity'] = em_sim_loss
+
+        inters_T = {feature: results_T.get(feature, []) for feature in FEATURES}
+        inters_S = {feature: results_S.get(feature, []) for feature in FEATURES}
+        inputs_mask_T = results_T.get('inputs_mask', None)
+        inputs_mask_S = results_S.get('inputs_mask', None)
+        for ith, inter_match in enumerate(self.d_config.intermediate_matches):
+            layer_T = inter_match.layer_T
+            layer_S = inter_match.layer_S
+            feature = inter_match.feature
+            loss_type = inter_match.loss
+            match_weight = inter_match.weight
+            match_loss = MATCH_LOSS_MAP[loss_type]
+
+            if type(layer_S) is list and type(layer_T) is list:
+                inter_S = [inters_S[feature][s] for s in layer_S]
+                inter_T = [inters_T[feature][t] for t in layer_T]
+                name_S = '-'.join(map(str, layer_S))
+                name_T = '-'.join(map(str, layer_T))
+                if self.projs[ith]:
+                    # inter_T = [self.projs[ith](t) for t in inter_T]
+                    inter_S = [self.projs[ith](s) for s in inter_S]
+            else:
+                inter_S = inters_S[feature][layer_S]
+                inter_T = inters_T[feature][layer_T]
+                name_S = str(layer_S)
+                name_T = str(layer_T)
+                if self.projs[ith]:
+                    # inter_T = self.projs[ith](inter_T)
+                    inter_S = self.projs[ith](inter_S)
+
+            intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
+            total_loss += intermediate_loss * match_weight
+            losses_dict[f'unweighted_{feature}_{loss_type}_{name_S}_{name_T}'] = intermediate_loss
+
+        if self.has_custom_matches:
+            for hook_T, hook_S, match_weight, match_loss, proj_func in \
+                    zip(self.custom_matches_cache['hook_outputs_T'], self.custom_matches_cache['hook_outputs_S'],
+                        self.custom_matches_cache['match_weghts'], self.custom_matches_cache['match_losses'],
+                        self.custom_matches_cache['match_proj_funcs']):
+                if proj_func is not None:
+                    hook_S = proj_func(hook_S)
+                total_loss += match_weight * match_loss(hook_S, hook_T, inputs_mask_S, inputs_mask_T)
+            self.custom_matches_cache['hook_outputs_T'] = []
+            self.custom_matches_cache['hook_outputs_S'] = []
+
+        if 'losses' in results_S:
+            total_hl_loss = 0
+            for loss in results_S['losses']:
+                # in case of multi-GPU
+                total_hl_loss += loss.mean()
+            total_loss += total_hl_loss * self.d_config.hard_label_weight
+            losses_dict['unweighted_hard_label_loss'] = total_hl_loss
+        return total_loss, losses_dict
+
+    def compute_dev_loss(self, batch, pairing_batch, args, metrics_loss=False):
+        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device,
+                                                                                        self.model_T, self.model_S,
+                                                                                        args)
+
+        results_T = post_adaptor(self.adaptor_T(teacher_batch, pairing_batch['teacher'], results_T))
+        results_S = post_adaptor(self.adaptor_S(student_batch, pairing_batch['student'], results_S))
+
+        results_T = add_attention_value(self.model_T, results_T)
+        results_S = add_attention_value(self.model_S, results_S)
+
+        losses_dict = dict()
+        total_loss = 0
+        if 'embedding_similarity' in results_S:
+            em_sim_loss = torch.nn.functional.mse_loss(results_S['embedding_similarity'],
+                                                       results_T['embedding_similarity'])
+            total_loss += em_sim_loss * self.d_config.em_sim_loss_weight
+            losses_dict['unweighted_embedding_similarity'] = em_sim_loss
+
+            if metrics_loss:
+                return em_sim_loss, losses_dict
 
         inters_T = {feature: results_T.get(feature, []) for feature in FEATURES}
         inters_S = {feature: results_S.get(feature, []) for feature in FEATURES}

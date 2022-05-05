@@ -214,6 +214,7 @@ class DistillationConfig(Config):
                       temperature_scheduler = 'none',
                       hard_label_weight=0,
                       hard_label_weight_scheduler = 'none',
+                      em_sim_loss_weight = 0,
                       kd_loss_type='ce',
                       kd_loss_weight=1,
                       kd_loss_weight_scheduler = 'none',
@@ -239,6 +240,7 @@ class DistillationConfig(Config):
         self.kd_loss_type = kd_loss_type
         self.kd_loss_weight = kd_loss_weight
         self.kd_loss_weight_scheduler = None
+        self.em_sim_loss_weight = em_sim_loss_weight
         if kd_loss_weight_scheduler != 'none':
             assert kd_loss_weight_scheduler in WEIGHT_SCHEDULER, \
                     "Invalid kd_loss_weight_scheduler"
