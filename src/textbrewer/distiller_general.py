@@ -187,6 +187,7 @@ class GeneralDistiller(BasicDistiller):
         (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device,
                                                                                         self.model_T, self.model_S,
                                                                                         args)
+        pairing_batch = move_to_device(pairing_batch, self.t_config.device)
 
         results_T = post_adaptor(self.adaptor_T(teacher_batch, pairing_batch['teacher'], results_T))
         results_S = post_adaptor(self.adaptor_S(student_batch, pairing_batch['student'], results_S))
