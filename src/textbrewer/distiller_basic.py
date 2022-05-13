@@ -263,6 +263,7 @@ class BasicDistiller(AbstractDistiller):
 
                 total_loss /= self.t_config.gradient_accumulation_steps
                 if run:
+                    run.log(losses_dict)
                     run.log({'loss': total_loss})
 
                 if self.t_config.fp16:
@@ -280,11 +281,13 @@ class BasicDistiller(AbstractDistiller):
                             pairing_dev_batch = pairing_batch_processor(dev_batch)
                             dev_batch = batch_postprocessor(dev_batch)
                         with torch.no_grad():
-                            dev_loss_temp, _ = self.compute_dev_loss(dev_batch, pairing_dev_batch, args, metrics_loss=dev_metrics_loss)
+                            dev_loss_temp, dev_loss_dict_temp = self.compute_dev_loss(dev_batch, pairing_dev_batch, args, metrics_loss=dev_metrics_loss)
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
                     if run:
+                        dev_loss_dict_temp = {'dev_' + k: dev_loss_dict_temp[k] for k in dev_loss_dict_temp}
+                        run.log(dev_loss_dict_temp)
                         run.log({'dev_loss': dev_loss})
                     if dev_loss - prev_dev_loss > dev_loss_threshold:
                         patience_count += 1

@@ -250,6 +250,8 @@ def get_outputs_from_batch(batch, device, model_T, model_S, args, no_teacher_for
         if 'teacher' in batch and 'student' in batch:
             teacher_batch = batch['teacher']
             student_batch = batch['student']
+            teacher_batch = {k: teacher_batch[k] for k in teacher_batch if k not in ['unique_ids']}
+            student_batch = {k: student_batch[k] for k in student_batch if k not in ['unique_ids']}
             teacher_batch = move_to_device(teacher_batch, device)
             # teacher outputs
             if no_teacher_forward is True:
