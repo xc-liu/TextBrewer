@@ -185,7 +185,7 @@ class BasicDistiller(AbstractDistiller):
                     run.log({'dev_loss': dev_loss})
                 if dev_loss - prev_dev_loss > dev_loss_threshold:
                     patience_count += 1
-                    if patience_count == patience:
+                    if patience_count >= patience:
                         logger.info("Early stopping triggered. Training finished")
                         self.model_T.load_state_dict(self.best_model_T)
                         self.model_S.load_state_dict(self.best_model_S)
@@ -195,7 +195,7 @@ class BasicDistiller(AbstractDistiller):
                     self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                     self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                     self.save_state_dict_S()
-                    prev_dev_loss = dev_loss
+                prev_dev_loss = min(dev_loss, prev_dev_loss)
 
             if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                 if max_grad_norm > 0:
@@ -291,7 +291,7 @@ class BasicDistiller(AbstractDistiller):
                         run.log({'dev_loss': dev_loss})
                     if dev_loss - prev_dev_loss > dev_loss_threshold:
                         patience_count += 1
-                        if patience_count == patience:
+                        if patience_count >= patience:
                             logger.info("Early stopping triggered. Training finished")
                             self.model_T.load_state_dict(self.best_model_T)
                             self.model_S.load_state_dict(self.best_model_S)
@@ -301,7 +301,7 @@ class BasicDistiller(AbstractDistiller):
                         self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                         self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                         self.save_state_dict_S()
-                        prev_dev_loss = dev_loss
+                    prev_dev_loss = min(dev_loss, prev_dev_loss)
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
