@@ -195,7 +195,7 @@ class BasicDistiller(AbstractDistiller):
                     self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                     self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                     self.save_state_dict_S()
-                prev_dev_loss = min(dev_loss, prev_dev_loss)
+                    prev_dev_loss = min(dev_loss, prev_dev_loss)
 
             if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                 if max_grad_norm > 0:
@@ -301,7 +301,7 @@ class BasicDistiller(AbstractDistiller):
                         self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                         self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                         self.save_state_dict_S()
-                    prev_dev_loss = min(dev_loss, prev_dev_loss)
+                        prev_dev_loss = min(dev_loss, prev_dev_loss)
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
