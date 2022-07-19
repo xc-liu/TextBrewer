@@ -80,7 +80,12 @@ class BasicDistiller(AbstractDistiller):
         # update scheduler
         if scheduler_class is not None:
             # overwrite scheduler
+            last_epoch = -1
+            if 'last_epoch' in scheduler_args:
+                last_epoch = scheduler_args['last_epoch']
+                scheduler_args['last_epoch'] = -1
             scheduler = scheduler_class(**{'optimizer':optimizer},**scheduler_args)
+            scheduler.last_epoch = last_epoch
 
         if self.t_config.fp16:
             if not has_apex:
