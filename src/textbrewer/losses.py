@@ -73,7 +73,8 @@ def value_kl_divergence(value_S, value_T, mask=None):
     if mask is None:
         VR_S_select = torch.where(VR_S <= -1e-3, torch.zeros_like(VR_S), VR_S)
         VR_T_select = torch.where(VR_T <= -1e-3, torch.zeros_like(VR_T), VR_T)
-        loss = F.kl_div(torch.log(VR_S_select), VR_T_select, reduction='batchmean') / (VR_S_select.size(1) * VR_S_select.size(2))
+        non_zero_mask = VR_S_select != 0
+        loss = F.kl_div(torch.log(VR_S_select[non_zero_mask]), VR_T_select[non_zero_mask], reduction='batchmean') / (VR_S_select.size(1) * VR_S_select.size(2))
     else:
         mask = mask.to(VR_S).unsqueeze(1).expand(-1, VR_S.size(1), -1) # (bs, num_of_heads, len)
         valid_count = torch.pow(mask.sum(dim=2),2).sum()
