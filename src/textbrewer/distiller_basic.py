@@ -26,7 +26,6 @@ class BasicDistiller(AbstractDistiller):
                  adaptor_T,
                  adaptor_S):
         super(BasicDistiller, self).__init__(train_config, distill_config, model_T, model_S, adaptor_T, adaptor_S)
-        self.best_model_T = None
         self.best_model_S = None
 
     def save_and_callback(self,global_step, step, epoch, callback):
@@ -136,7 +135,7 @@ class BasicDistiller(AbstractDistiller):
         tqdm_disable = None if self.rank == 0 else True
         return optimizer, scheduler, tqdm_disable
 
-    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
+    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
         if self.d_config.is_caching_logits is True:
             raise AssertionError("You cannot set is_caching_logits to True with num_steps not None!")
         total_global_steps = num_steps
@@ -193,16 +192,14 @@ class BasicDistiller(AbstractDistiller):
                 dev_loss = dev_loss / dev_step
                 if run:
                     run.log({run_prefix + 'dev_loss': dev_loss})
-                if dev_loss - prev_dev_loss > dev_loss_threshold:
+                if dev_loss_threshold < dev_loss - prev_dev_loss < stability_threshold:
                     patience_count += 1
                     if patience_count >= patience:
                         logger.info("Early stopping triggered. Training finished")
-                        self.model_T.load_state_dict(self.best_model_T)
                         self.model_S.load_state_dict(self.best_model_S)
-                        return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True}
+                        return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True, 'best_model': None}
                 else:
                     patience_count = 0
-                    self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                     self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                     self.save_state_dict_S()
                     prev_dev_loss = min(dev_loss, prev_dev_loss)
@@ -231,9 +228,9 @@ class BasicDistiller(AbstractDistiller):
                     self.save_and_callback(global_step, step, 0, callback)
             if global_step >= total_global_steps:
                 logger.info("Training finished")
-                return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False}
+                return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False, 'best_model': self.best_model_S}
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
@@ -310,16 +307,14 @@ class BasicDistiller(AbstractDistiller):
                             temp_dev_losses_dict[run_prefix + k] = dev_loss_dict_temp[k]
                         run.log(temp_dev_losses_dict)
                         run.log({run_prefix + 'dev_loss': dev_loss})
-                    if dev_loss - prev_dev_loss > dev_loss_threshold:
+                    if dev_loss_threshold < dev_loss - prev_dev_loss < stability_threshold:
                         patience_count += 1
                         if patience_count >= patience:
                             logger.info("Early stopping triggered. Training finished")
-                            self.model_T.load_state_dict(self.best_model_T)
                             self.model_S.load_state_dict(self.best_model_S)
-                            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True}
+                            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True, 'best_model': None}
                     else:
                         patience_count = 0
-                        self.best_model_T = copy.deepcopy(self.model_T.state_dict())
                         self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                         self.save_state_dict_S()
                         prev_dev_loss = min(dev_loss, prev_dev_loss)
@@ -349,9 +344,9 @@ class BasicDistiller(AbstractDistiller):
                         self.save_and_callback(global_step, step, current_epoch, callback)
 
             logger.info(f"Epoch {current_epoch+1} finished")
-            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False}
+            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False, 'best_model': self.best_model_S}
 
-    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, run_prefix='', dev_data=None, patience=None, dev_check=None, dev_loss_threshold=None, dev_metrics_loss=False, model_name=None, pairing_batch_processor=None, last_train_info=None, **args):
+    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, run_prefix='', dev_data=None, patience=None, dev_check=None, dev_loss_threshold=None, stability_threshold=None, dev_metrics_loss=False, model_name=None, pairing_batch_processor=None, last_train_info=None, **args):
         """
         trains the student model.
 
@@ -381,6 +376,7 @@ class BasicDistiller(AbstractDistiller):
                 distiller.train(optimizer, scheduler_class = get_linear_schedule_with_warmup, scheduler_args= {'num_warmup_steps': 100, 'num_training_steps': 1000})
         """
         optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args, scheduler)
+        self.best_model_S = last_train_info['best_model']
 
         if model_name is not None:
             self.model_name = model_name + '_'
@@ -390,9 +386,9 @@ class BasicDistiller(AbstractDistiller):
         assert not (num_epochs is None and num_steps is None)
         assert not (dev_data is not None and (patience is None or dev_check is None or dev_loss_threshold is None))
         if num_steps is not None:
-            return self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
+            return self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
         else:
-            return self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
+            return self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
 
     def train_on_batch(self, batch, pairing_batch, args):
         if self.d_config.is_caching_logits is False:
