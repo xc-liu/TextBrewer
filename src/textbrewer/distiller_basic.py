@@ -376,7 +376,8 @@ class BasicDistiller(AbstractDistiller):
                 distiller.train(optimizer, scheduler_class = get_linear_schedule_with_warmup, scheduler_args= {'num_warmup_steps': 100, 'num_training_steps': 1000})
         """
         optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args, scheduler)
-        self.best_model_S = last_train_info['best_model']
+        if last_train_info is not None:
+            self.best_model_S = last_train_info['best_model']
 
         if model_name is not None:
             self.model_name = model_name + '_'
