@@ -384,6 +384,9 @@ class BasicDistiller(AbstractDistiller):
         else:
             self.model_name = ''
 
+        if stability_threshold is None:
+            stability_threshold = float('inf')
+
         assert not (num_epochs is None and num_steps is None)
         assert not (dev_data is not None and (patience is None or dev_check is None or dev_loss_threshold is None))
         if num_steps is not None:
