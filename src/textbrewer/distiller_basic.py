@@ -4,6 +4,7 @@ import wandb
 
 from .distiller_utils import *
 
+
 class BasicDistiller(AbstractDistiller):
     """
     Performs **single-teacher single-task** distillation, provides basic distillation strategies.
@@ -19,8 +20,9 @@ class BasicDistiller(AbstractDistiller):
     The roles of `adaptor_T` and `adaptor_S` are explained in :py:func:`adaptor`.
 
     """
+
     def __init__(self, train_config,
-                       distill_config,
+                 distill_config,
                  model_T,
                  model_S,
                  adaptor_T,
@@ -28,9 +30,9 @@ class BasicDistiller(AbstractDistiller):
         super(BasicDistiller, self).__init__(train_config, distill_config, model_T, model_S, adaptor_T, adaptor_S)
         self.best_model_S = None
 
-    def save_and_callback(self,global_step, step, epoch, callback):
+    def save_and_callback(self, global_step, step, epoch, callback):
         if self.rank != 0:
-            torch.distributed.barrier()    # save and eval with single process
+            torch.distributed.barrier()  # save and eval with single process
         else:
             # logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
             # coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
@@ -48,7 +50,6 @@ class BasicDistiller(AbstractDistiller):
         state_dict = coreModel.state_dict()
         torch.save(state_dict, os.path.join(self.t_config.output_dir, self.model_name + "student_temp.pkl"))
 
-
     def write_loss(self, total_loss, writer_step, losses_dict=None):
         if self.rank == 0:
             cpu_total_loss = total_loss.cpu().item()
@@ -58,20 +59,19 @@ class BasicDistiller(AbstractDistiller):
                     cpu_loss = loss.cpu().item()
                     self.tb_writer.add_scalar(f"scalar/{name}", cpu_loss, writer_step)
 
-
     def initialize_training(self, optimizer, scheduler_class, scheduler_args, scheduler):
         # update optimizer for projection layer (used in GeneralDistiller)
-        if hasattr(self,'projs'):
-            for proj,proj_group in zip(self.projs, self.projs_group):
+        if hasattr(self, 'projs'):
+            for proj, proj_group in zip(self.projs, self.projs_group):
                 if proj is not None:
-                    assert isinstance(proj,nn.Module)
-                    optimizer.add_param_group({**{'params':proj.parameters()},**proj_group})
+                    assert isinstance(proj, nn.Module)
+                    optimizer.add_param_group({**{'params': proj.parameters()}, **proj_group})
 
-        if hasattr(self,'has_custom_matches') and self.has_custom_matches:
-            for proj_func,proj_group in zip(self.custom_matches_cache['match_proj_funcs'],
-                                            self.custom_matches_cache['match_proj_groups']):
-                if isinstance(proj_func,nn.Module):
-                    optimizer.add_param_group({**{'params':proj_func.parameters()},**proj_group})
+        if hasattr(self, 'has_custom_matches') and self.has_custom_matches:
+            for proj_func, proj_group in zip(self.custom_matches_cache['match_proj_funcs'],
+                                             self.custom_matches_cache['match_proj_groups']):
+                if isinstance(proj_func, nn.Module):
+                    optimizer.add_param_group({**{'params': proj_func.parameters()}, **proj_group})
 
         logger.debug("Optimizer param group: ")
         logger.debug(f"{[[s.shape for s in g['params']] for g in optimizer.param_groups]}")
@@ -83,59 +83,69 @@ class BasicDistiller(AbstractDistiller):
             if 'last_epoch' in scheduler_args:
                 last_epoch = scheduler_args['last_epoch']
                 scheduler_args['last_epoch'] = -1
-            scheduler = scheduler_class(**{'optimizer':optimizer},**scheduler_args)
+            scheduler = scheduler_class(**{'optimizer': optimizer}, **scheduler_args)
             scheduler.last_epoch = last_epoch
 
         if self.t_config.fp16:
             if not has_apex:
                 raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            if isinstance(self.model_T,(list,tuple)):
+            if isinstance(self.model_T, (list, tuple)):
                 models = [self.model_S] + list(self.model_T)
                 models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
                 self.model_S = models[0]
-                self.model_T =models[1:]
-            elif isinstance(self.model_T,dict):
+                self.model_T = models[1:]
+            elif isinstance(self.model_T, dict):
                 tasknames, model_Ts = zip(*self.model_T.items())
                 models = [self.model_S] + list(model_Ts)
                 models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
                 self.model_S = models[0]
-                self.model_T = dict(zip(tasknames,models[1:]))
+                self.model_T = dict(zip(tasknames, models[1:]))
             else:
-                (self.model_S, self.model_T), optimizer = amp.initialize([self.model_S, self.model_T], optimizer, opt_level=self.t_config.fp16_opt_level)
+                (self.model_S, self.model_T), optimizer = amp.initialize([self.model_S, self.model_T], optimizer,
+                                                                         opt_level=self.t_config.fp16_opt_level)
         if self.local_rank != -1:
             self.model_S = torch.nn.parallel.DistributedDataParallel(self.model_S,
-                        device_ids = [self.local_rank], output_device = self.local_rank,
-                        find_unused_parameters = True)
-            if isinstance(self.model_T,(list,tuple)):
+                                                                     device_ids=[self.local_rank],
+                                                                     output_device=self.local_rank,
+                                                                     find_unused_parameters=True)
+            if isinstance(self.model_T, (list, tuple)):
                 self.model_T = [torch.nn.parallel.DistributedDataParallel(model_t,
-                        device_ids = [self.local_rank], output_device = self.local_rank,
-                        find_unused_parameters = True) for model_t in self.model_T]
-            elif isinstance(self.model_T,dict):
-                self.model_T = {k:torch.nn.parallel.DistributedDataParallel(v, 
-                        device_ids = [self.local_rank], output_device = self.local_rank,
-                        find_unused_parameters = True) for k,v in self.model_T.items()}
+                                                                          device_ids=[self.local_rank],
+                                                                          output_device=self.local_rank,
+                                                                          find_unused_parameters=True) for model_t in
+                                self.model_T]
+            elif isinstance(self.model_T, dict):
+                self.model_T = {k: torch.nn.parallel.DistributedDataParallel(v,
+                                                                             device_ids=[self.local_rank],
+                                                                             output_device=self.local_rank,
+                                                                             find_unused_parameters=True) for k, v in
+                                self.model_T.items()}
             else:
                 self.model_T = torch.nn.parallel.DistributedDataParallel(self.model_T,
-                        device_ids = [self.local_rank], output_device = self.local_rank,
-                        find_unused_parameters = True)
-            if hasattr(self,'projs'):
-                for i,proj in enumerate(self.projs):
+                                                                         device_ids=[self.local_rank],
+                                                                         output_device=self.local_rank,
+                                                                         find_unused_parameters=True)
+            if hasattr(self, 'projs'):
+                for i, proj in enumerate(self.projs):
                     if proj is not None:
-                        assert isinstance(proj,nn.Module)
+                        assert isinstance(proj, nn.Module)
                         self.projs[i] = torch.nn.parallel.DistributedDataParallel(proj,
-                            device_ids = [self.local_rank], output_device = self.local_rank)
+                                                                                  device_ids=[self.local_rank],
+                                                                                  output_device=self.local_rank)
         elif self.t_config.data_parallel:
             self.model_S = torch.nn.DataParallel(self.model_S)
-            if isinstance(self.model_T,(list,tuple)):
+            if isinstance(self.model_T, (list, tuple)):
                 self.model_T = [torch.nn.DataParallel(model_t) for model_t in self.model_T]
-            elif isinstance(self.model_T,dict):
-                self.model_T = {k:torch.nn.DataParallel(v) for k,v in self.model_T.items()}
+            elif isinstance(self.model_T, dict):
+                self.model_T = {k: torch.nn.DataParallel(v) for k, v in self.model_T.items()}
             else:
                 self.model_T = torch.nn.DataParallel(self.model_T)
         tqdm_disable = None if self.rank == 0 else True
         return optimizer, scheduler, tqdm_disable
 
-    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
+    def train_with_num_steps(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback,
+                             batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold,
+                             stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
         if self.d_config.is_caching_logits is True:
             raise AssertionError("You cannot set is_caching_logits to True with num_steps not None!")
         total_global_steps = num_steps
@@ -144,7 +154,7 @@ class BasicDistiller(AbstractDistiller):
         print_every = ckpt_steps // self.print_freq
         if print_every == 0:
             print_every = ckpt_steps
-        checkpoints = [ i * ckpt_steps for i in range(1,num_steps//ckpt_steps+1)] + [total_global_steps]
+        checkpoints = [i * ckpt_steps for i in range(1, num_steps // ckpt_steps + 1)] + [total_global_steps]
         logger.info(f"Total training steps: {total_global_steps}")
         logger.info(f"Checkpoints(step): {checkpoints}")
 
@@ -166,13 +176,13 @@ class BasicDistiller(AbstractDistiller):
             total_loss, losses_dict = self.train_on_batch(batch, pairing_batch, args)
             self.write_loss(total_loss, writer_step, losses_dict)
             writer_step += 1
-    
+
             total_loss /= self.t_config.gradient_accumulation_steps
             if run:
                 run.log({run_prefix + 'loss': total_loss})
 
             if self.t_config.fp16:
-                with amp.scale_loss(total_loss,optimizer) as scaled_loss:
+                with amp.scale_loss(total_loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
                 total_loss.backward()
@@ -186,7 +196,8 @@ class BasicDistiller(AbstractDistiller):
                         pairing_dev_batch = pairing_batch_processor(dev_batch)
                         dev_batch = batch_postprocessor(dev_batch)
                     with torch.no_grad():
-                        dev_loss_temp, _ = self.compute_dev_loss(dev_batch, pairing_dev_batch, args, metrics_loss=dev_metrics_loss)
+                        dev_loss_temp, _ = self.compute_dev_loss(dev_batch, pairing_dev_batch, args,
+                                                                 metrics_loss=dev_metrics_loss)
                     dev_loss += dev_loss_temp
                     dev_step += 1
                 dev_loss = dev_loss / dev_step
@@ -197,14 +208,15 @@ class BasicDistiller(AbstractDistiller):
                     if patience_count >= patience:
                         logger.info("Early stopping triggered. Training finished")
                         self.model_S.load_state_dict(self.best_model_S)
-                        return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True, 'best_model': None}
+                        return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True,
+                                'best_model': None}
                 else:
                     patience_count = 0
                     self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                     self.save_state_dict_S()
                     prev_dev_loss = min(dev_loss, prev_dev_loss)
 
-            if (step+1)%self.t_config.gradient_accumulation_steps == 0:
+            if (step + 1) % self.t_config.gradient_accumulation_steps == 0:
                 if max_grad_norm > 0:
                     if self.t_config.fp16:
                         torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
@@ -217,26 +229,30 @@ class BasicDistiller(AbstractDistiller):
                 global_step += 1
                 if self.d_config.kd_loss_weight_scheduler is not None:
                     self.d_config.kd_loss_weight = \
-                        self.d_config.kd_loss_weight_scheduler(global_step/total_global_steps)
+                        self.d_config.kd_loss_weight_scheduler(global_step / total_global_steps)
                 if self.d_config.hard_label_weight_scheduler is not None:
                     self.d_config.hard_label_weight = \
-                        self.d_config.hard_label_weight_scheduler(global_step/total_global_steps)
+                        self.d_config.hard_label_weight_scheduler(global_step / total_global_steps)
 
                 if (global_step) % print_every == 0:
-                    logger.info(f"Global step: {global_step}, epoch step:{step+1}")
-                if (global_step%ckpt_steps==0) or global_step==total_global_steps:
+                    logger.info(f"Global step: {global_step}, epoch step:{step + 1}")
+                if (global_step % ckpt_steps == 0) or global_step == total_global_steps:
                     self.save_and_callback(global_step, step, 0, callback)
             if global_step >= total_global_steps:
                 logger.info("Training finished")
-                return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False, 'best_model': self.best_model_S}
+                return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False,
+                        'best_model': self.best_model_S}
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
-        train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback,
+                              batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold,
+                              stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args):
+        train_steps_per_epoch = len(dataloader) // self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
         if print_every == 0:
             print_every = train_steps_per_epoch
-        checkpoints = [int(train_steps_per_epoch*ci/self.t_config.ckpt_frequency) for ci in range(self.t_config.ckpt_frequency)]
+        checkpoints = [int(train_steps_per_epoch * ci / self.t_config.ckpt_frequency) for ci in
+                       range(self.t_config.ckpt_frequency)]
         logger.info(f"Training steps per epoch: {train_steps_per_epoch}")
         logger.info(f"Checkpoints(step): {checkpoints}")
 
@@ -252,19 +268,20 @@ class BasicDistiller(AbstractDistiller):
 
         if self.d_config.is_caching_logits is True:
             logger.info(f"Caching batches and teacher's logits...")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 self.cache_logits(batch, args, batch_postprocessor)
 
-        for current_epoch in tqdm(range(int(num_epochs)),disable=tqdm_disable):
-            if self.local_rank != -1 and hasattr(dataloader,'sampler'):
-                dataloader.sampler.set_epoch(current_epoch)  #In distributed mode, calling the set_epoch method is needed to make shuffling work;
-            logger.info(f"Epoch {current_epoch+1}")
+        for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
+            if self.local_rank != -1 and hasattr(dataloader, 'sampler'):
+                dataloader.sampler.set_epoch(
+                    current_epoch)  # In distributed mode, calling the set_epoch method is needed to make shuffling work;
+            logger.info(f"Epoch {current_epoch + 1}")
             optimizer.zero_grad()
             if self.d_config.is_caching_logits:
                 random.shuffle(self.logits_cache)
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 pairing_batch = None
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                     pairing_batch = pairing_batch_processor(batch)
@@ -282,7 +299,7 @@ class BasicDistiller(AbstractDistiller):
                     run.log({run_prefix + 'loss': total_loss})
 
                 if self.t_config.fp16:
-                    with amp.scale_loss(total_loss,optimizer) as scaled_loss:
+                    with amp.scale_loss(total_loss, optimizer) as scaled_loss:
                         scaled_loss.backward()
                 else:
                     total_loss.backward()
@@ -296,7 +313,9 @@ class BasicDistiller(AbstractDistiller):
                             pairing_dev_batch = pairing_batch_processor(dev_batch)
                             dev_batch = batch_postprocessor(dev_batch)
                         with torch.no_grad():
-                            dev_loss_temp, dev_loss_dict_temp = self.compute_dev_loss(dev_batch, pairing_dev_batch, args, metrics_loss=dev_metrics_loss)
+                            dev_loss_temp, dev_loss_dict_temp = self.compute_dev_loss(dev_batch, pairing_dev_batch,
+                                                                                      args,
+                                                                                      metrics_loss=dev_metrics_loss)
                         dev_loss += dev_loss_temp
                         dev_step += 1
                     dev_loss = dev_loss / dev_step
@@ -312,19 +331,20 @@ class BasicDistiller(AbstractDistiller):
                         if patience_count >= patience:
                             logger.info("Early stopping triggered. Training finished")
                             self.model_S.load_state_dict(self.best_model_S)
-                            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True, 'best_model': None}
+                            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': True,
+                                    'best_model': None}
                     else:
                         patience_count = 0
                         self.best_model_S = copy.deepcopy(self.model_S.state_dict())
                         self.save_state_dict_S()
                         prev_dev_loss = min(dev_loss, prev_dev_loss)
 
-                if (step+1)%self.t_config.gradient_accumulation_steps == 0:
+                if (step + 1) % self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
                         if self.t_config.fp16:
                             torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
                         else:
-                            torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm) 
+                            torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
                     optimizer.step()
                     if scheduler is not None:
                         scheduler.step()
@@ -332,21 +352,26 @@ class BasicDistiller(AbstractDistiller):
                     global_step += 1
                     if self.d_config.kd_loss_weight_scheduler is not None:
                         self.d_config.kd_loss_weight = \
-                            self.d_config.kd_loss_weight_scheduler(global_step/total_global_steps)
+                            self.d_config.kd_loss_weight_scheduler(global_step / total_global_steps)
                     if self.d_config.hard_label_weight_scheduler is not None:
                         self.d_config.hard_label_weight = \
-                            self.d_config.hard_label_weight_scheduler(global_step/total_global_steps)
+                            self.d_config.hard_label_weight_scheduler(global_step / total_global_steps)
 
                     if (global_step) % print_every == 0:
-                        logger.info(f"Global step: {global_step}, epoch step:{step+1}")
-                    if (global_step%train_steps_per_epoch in checkpoints) \
-                            and ((current_epoch+1)%self.t_config.ckpt_epoch_frequency==0 or current_epoch+1==num_epochs):
+                        logger.info(f"Global step: {global_step}, epoch step:{step + 1}")
+                    if (global_step % train_steps_per_epoch in checkpoints) \
+                            and ((
+                                         current_epoch + 1) % self.t_config.ckpt_epoch_frequency == 0 or current_epoch + 1 == num_epochs):
                         self.save_and_callback(global_step, step, current_epoch, callback)
 
-            logger.info(f"Epoch {current_epoch+1} finished")
-            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False, 'best_model': self.best_model_S}
+            logger.info(f"Epoch {current_epoch + 1} finished")
+            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False,
+                    'best_model': self.best_model_S}
 
-    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, run_prefix='', dev_data=None, patience=None, dev_check=None, dev_loss_threshold=None, stability_threshold=None, dev_metrics_loss=False, model_name=None, pairing_batch_processor=None, last_train_info=None, **args):
+    def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None,
+              max_grad_norm=-1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, run_prefix='',
+              dev_data=None, patience=None, dev_check=None, dev_loss_threshold=None, stability_threshold=None,
+              dev_metrics_loss=False, model_name=None, pairing_batch_processor=None, last_train_info=None, **args):
         """
         trains the student model.
 
@@ -375,7 +400,8 @@ class BasicDistiller(AbstractDistiller):
                 from transformers import get_linear_schedule_with_warmup
                 distiller.train(optimizer, scheduler_class = get_linear_schedule_with_warmup, scheduler_args= {'num_warmup_steps': 100, 'num_training_steps': 1000})
         """
-        optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args, scheduler)
+        optimizer, scheduler, tqdm_disable = self.initialize_training(optimizer, scheduler_class, scheduler_args,
+                                                                      scheduler)
         if last_train_info is not None:
             self.best_model_S = last_train_info['best_model']
 
@@ -390,42 +416,51 @@ class BasicDistiller(AbstractDistiller):
         assert not (num_epochs is None and num_steps is None)
         assert not (dev_data is not None and (patience is None or dev_check is None or dev_loss_threshold is None))
         if num_steps is not None:
-            return self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
+            return self.train_with_num_steps(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_steps,
+                                             callback, batch_postprocessor, run, run_prefix, dev_data, patience,
+                                             dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss,
+                                             pairing_batch_processor, last_train_info, **args)
         else:
-            return self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, run, run_prefix, dev_data, patience, dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss, pairing_batch_processor, last_train_info, **args)
+            return self.train_with_num_epochs(optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs,
+                                              callback, batch_postprocessor, run, run_prefix, dev_data, patience,
+                                              dev_check, dev_loss_threshold, stability_threshold, dev_metrics_loss,
+                                              pairing_batch_processor, last_train_info, **args)
 
     def train_on_batch(self, batch, pairing_batch, args):
         if self.d_config.is_caching_logits is False:
-            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device,
+                                                                                            self.model_T, self.model_S,
+                                                                                            args)
             pairing_batch = move_to_device(pairing_batch, self.t_config.device)
-            results_T = post_adaptor(self.adaptor_T(teacher_batch, pairing_batch['teacher'],results_T))
-            results_S = post_adaptor(self.adaptor_S(student_batch, pairing_batch['student'],results_S))
+            results_T = post_adaptor(self.adaptor_T(teacher_batch, pairing_batch['teacher'], results_T))
+            results_S = post_adaptor(self.adaptor_S(student_batch, pairing_batch['student'], results_S))
         else:
             batch, cached_logits = batch
-            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, no_teacher_forward=True)
+            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T,
+                                                                   self.model_S, args, no_teacher_forward=True)
 
-            results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
-            results_T = {'logits':[logits.to(self.t_config.device) for logits in cached_logits]}
+            results_S = post_adaptor(self.adaptor_S(student_batch, results_S))
+            results_T = {'logits': [logits.to(self.t_config.device) for logits in cached_logits]}
 
             if 'logits_mask' in results_S:
                 results_T['logits_mask'] = results_S['logits_mask']
 
-        total_loss, losses_dict = self.compute_loss(results_S,results_T)
+        total_loss, losses_dict = self.compute_loss(results_S, results_T)
 
         return total_loss, losses_dict
 
     def compute_loss(self, results_S, results_T):
-        total_loss  = 0
+        total_loss = 0
         losses_dict = dict()
         logits_list_T = results_T['logits']  # list of tensor
         logits_list_S = results_S['logits']  # list of tensor
 
         if 'logits_mask' in results_S:
             masks_list_S = results_S['logits_mask']
-            logits_list_S = select_logits_with_mask(logits_list_S,masks_list_S)  #(mask_sum, num_of_class)
+            logits_list_S = select_logits_with_mask(logits_list_S, masks_list_S)  # (mask_sum, num_of_class)
         if 'logits_mask' in results_T:
             masks_list_T = results_T['logits_mask']
-            logits_list_T = select_logits_with_mask(logits_list_T,masks_list_T)  #(mask_sum, num_of_class)
+            logits_list_T = select_logits_with_mask(logits_list_T, masks_list_T)  # (mask_sum, num_of_class)
 
         total_kd_loss = 0
         if self.d_config.probability_shift is True:
@@ -438,7 +473,7 @@ class BasicDistiller(AbstractDistiller):
                     temperature = self.d_config.temperature
                 total_kd_loss += self.kd_loss(l_S, l_T, temperature)
         else:
-            for l_T,l_S in zip(logits_list_T,logits_list_S):
+            for l_T, l_S in zip(logits_list_T, logits_list_S):
                 if self.d_config.temperature_scheduler is not None:
                     temperature = self.d_config.temperature_scheduler(l_S, l_T, self.d_config.temperature)
                 else:
@@ -451,21 +486,20 @@ class BasicDistiller(AbstractDistiller):
             total_hl_loss = 0
             for loss in results_S['losses']:
                 # in case of multi-GPU
-                total_hl_loss += loss.mean() 
+                total_hl_loss += loss.mean()
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         return total_loss, losses_dict
 
-
     def cache_logits(self, batch, args, batch_postprocessor):
-            if batch_postprocessor is not None:
-                batch = batch_postprocessor(batch)
-            batch = move_to_device(batch, self.t_config.device)
-            with torch.no_grad():
-                if type(batch) is dict:
-                    results_T = self.model_T(**batch,**args)
-                else:
-                    results_T = self.model_T(*batch, **args)
-            results_T = post_adaptor(self.adaptor_T(batch,results_T))
+        if batch_postprocessor is not None:
+            batch = batch_postprocessor(batch)
+        batch = move_to_device(batch, self.t_config.device)
+        with torch.no_grad():
+            if type(batch) is dict:
+                results_T = self.model_T(**batch, **args)
+            else:
+                results_T = self.model_T(*batch, **args)
+        results_T = post_adaptor(self.adaptor_T(batch, results_T))
 
-            self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
+        self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
