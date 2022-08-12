@@ -365,8 +365,7 @@ class BasicDistiller(AbstractDistiller):
                         self.save_and_callback(global_step, step, current_epoch, callback)
 
             logger.info(f"Epoch {current_epoch + 1} finished")
-            return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False,
-                    'best_model': self.best_model_S}
+        return {'prev_dev_loss': prev_dev_loss, 'patience_count': patience_count, 'stopped': False, 'best_model': self.best_model_S}
 
     def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None,
               max_grad_norm=-1.0, num_steps=None, callback=None, batch_postprocessor=None, run=None, run_prefix='',
